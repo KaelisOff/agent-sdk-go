@@ -26,6 +26,8 @@ notify = true
 approval = true
 storage_kb = 1024
 schedule = ["30 8 * * 1-5"]
+mail_send = 30
+mail_read = true
 `
 
 func TestParse(t *testing.T) {
@@ -33,7 +35,7 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(m.Permissions.Capabilities(), ","); got != "model,storage,schedule,notify,approval" {
+	if got := strings.Join(m.Permissions.Capabilities(), ","); got != "model,storage,schedule,notify,approval,mail.send,mail.read" {
 		t.Errorf("capabilities = %s", got)
 	}
 	if m.Run.CPUs != DefaultCPUs || m.Run.Pids != DefaultPids || m.Run.TimeoutMin != 15 {
@@ -59,6 +61,7 @@ func TestRejects(t *testing.T) {
 		"unknown section":   {`[run]`, "[network]\nallow = true\n[run]"},
 		"too much storage":  {`storage_kb = 1024`, `storage_kb = 99999999`},
 		"negative storage":  {`storage_kb = 1024`, `storage_kb = -1`},
+		"too many emails":   {`mail_send = 30`, `mail_send = 500`},
 		"schedule out of r": {`schedule = ["30 8 * * 1-5"]`, `schedule = ["30 25 * * *"]`},
 	} {
 		doc := strings.Replace(sample, edit[0], edit[1], 1)

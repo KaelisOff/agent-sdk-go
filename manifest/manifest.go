@@ -18,11 +18,13 @@ import (
 
 // Capabilities an agent can ask for.
 const (
-	CapModel    = "model"    // ask the box's model
-	CapStorage  = "storage"  // private key-value storage
-	CapSchedule = "schedule" // run at the times declared in the manifest
-	CapNotify   = "notify"   // send notifications to the owner and admins
-	CapApproval = "approval" // ask the owner or an admin for approval
+	CapModel    = "model"     // ask the box's model
+	CapStorage  = "storage"   // private key-value storage
+	CapSchedule = "schedule"  // run at the times declared in the manifest
+	CapNotify   = "notify"    // send notifications to the owner and admins
+	CapApproval = "approval"  // ask the owner or an admin for approval
+	CapMailSend = "mail.send" // send prospecting emails, under the box's guardrails
+	CapMailRead = "mail.read" // read the replies to its own emails
 )
 
 // Platform limits: a manifest may ask for less, never for more.
@@ -33,6 +35,7 @@ const (
 	MaxTimeoutMin  = 30
 	MaxStorageKB   = 16 * 1024
 	MaxSchedules   = 8
+	MaxMailPerDay  = 200
 	DefaultMemory  = 128
 	DefaultCPUs    = 1.0
 	DefaultPids    = 64
@@ -75,6 +78,11 @@ type Permissions struct {
 	// Schedule lists cron expressions (minute hour day month weekday),
 	// in the box's time zone.
 	Schedule []string `toml:"schedule" json:"schedule,omitempty"`
+	// MailSend > 0 asks to send up to that many emails a day (the box's
+	// own limits and guardrails apply on top).
+	MailSend int `toml:"mail_send" json:"mail_send,omitempty"`
+	// MailRead asks to read the replies to the agent's own emails.
+	MailRead bool `toml:"mail_read" json:"mail_read,omitempty"`
 }
 
 // Capabilities returns the capabilities asked for, in a stable order.
@@ -94,6 +102,12 @@ func (p Permissions) Capabilities() []string {
 	}
 	if p.Approval {
 		out = append(out, CapApproval)
+	}
+	if p.MailSend > 0 {
+		out = append(out, CapMailSend)
+	}
+	if p.MailRead {
+		out = append(out, CapMailRead)
 	}
 	return out
 }
@@ -164,6 +178,9 @@ func (m *Manifest) check() error {
 	p := m.Permissions
 	if p.StorageKB < 0 || p.StorageKB > MaxStorageKB {
 		return fmt.Errorf("permissions.storage_kb must be 0 to %d", MaxStorageKB)
+	}
+	if p.MailSend < 0 || p.MailSend > MaxMailPerDay {
+		return fmt.Errorf("permissions.mail_send must be 0 to %d", MaxMailPerDay)
 	}
 	if len(p.Schedule) > MaxSchedules {
 		return fmt.Errorf("at most %d schedules", MaxSchedules)

@@ -71,6 +71,9 @@ s'affiche dans l'historique de l'agent.
 | `storage.list` | `storage` | `prefix` | `{"keys": […]}`, triées, 1 000 max |
 | `notify` | `notify` | `title` (1 à 160 caractères), `body` (4 000 max) | `{"id"}` |
 | `approval.request` | `approval` | `title` (1 à 160), `details` (4 000 max), `data` (JSON libre, 16 Ko max), `expires_hours` (1 à 168, 72 par défaut) | `{"id"}` ; `quota_exceeded` si 10 demandes attendent déjà |
+| `mail.send` | `mail.send` | `to` (une adresse seule), `subject` (1 à 150, une ligne), `body` (texte, 5 000 max), `campaign`, `variant` (facultatifs, 40 caractères a-z 0-9 - _) | `{"id", "remaining"}` ; refus ci-dessous |
+| `mail.replies` | `mail.read` | `after` (curseur, 0 au début), `limit` (100 max) | `{"replies": [{"id", "kind", "to", "from", "subject", "text", "campaign", "variant", "sent_at", "received_at"}], "next"}` |
+| `mail.status` | `mail.send` ou `mail.read` | aucun | `{"configured", "paused", "window_open", "next_window", "sent_today", "limit_today", "agent_sent_today", "agent_limit", "stats": [{"campaign", "variant", "sent", "replied", "auto_replies", "unsubscribed", "bounced"}]}` |
 
 Les paramètres inconnus sont refusés (`invalid_params`). Le modèle est partagé avec les conversations
 de la box : un appel peut attendre qu'une génération en cours se termine.
@@ -84,7 +87,23 @@ de la box : un appel peut attendre qu'une génération en cours se termine.
 | `quota_exceeded` | mémoire pleine, trop de demandes d'accord en attente |
 | `unknown_method` | méthode inconnue de cette box |
 | `too_many_calls` | plus de 200 appels dans ce passage (l'agent est ensuite arrêté) |
-| `failed` | la box n'a pas pu faire l'action (modèle indisponible…) |
+| `failed` | la box n'a pas pu faire l'action (modèle indisponible, serveur mail injoignable…) |
+
+Refus propres aux emails (`mail.send`) :
+
+| Code | Signifie |
+|---|---|
+| `not_configured` | aucune messagerie n'est configurée sur la box |
+| `already_contacted` | cette adresse a déjà reçu un email (un seul par adresse, pour toujours) |
+| `opted_out` | la personne a répondu STOP, ou l'adresse n'existe pas |
+| `outside_hours` | hors de la plage d'envoi (lundi au samedi, 8 h à 19 h) |
+| `quota_exceeded` | limite du jour atteinte (celle de la box ou celle du manifeste) |
+| `paused` | envois en pause (trop d'erreurs ou de désinscriptions) : le propriétaire doit reprendre |
+| `bounced` | le serveur a refusé cette adresse ; elle est bloquée |
+
+`kind` d'une réponse : `reply`, `auto` (réponse automatique, absence), `unsubscribe` (la personne
+s'est désinscrite : l'adresse est déjà bloquée), `bounce` (l'adresse n'existe pas). Le texte d'une
+réponse est ce que la personne a écrit, sans le message cité.
 
 ## Ce que la box enregistre
 

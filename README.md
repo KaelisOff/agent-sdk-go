@@ -34,10 +34,29 @@ contourner, et vous n'avez pas à les réécrire.
 | horaires | `schedule = ["0 9 * * 1-5"]` | `run.Trigger.Kind == "schedule"` | 8 horaires max |
 | notification | `notify = true` | `box.Notify` | titre 160 caractères, texte 4 000 |
 | demande d'accord | `approval = true` | `box.RequestApproval` | 10 en attente max ; sans réponse avant l'échéance, c'est non |
+| envoi d'emails | `mail_send = 30` | `box.SendMail`, `box.MailStatus` | les garde-fous de la box, ci-dessous |
+| lecture des réponses | `mail_read = true` | `box.Replies` | seulement les réponses à ses propres emails |
 
 Le propriétaire de la box voit la liste des capacités avant l'installation et doit toutes les accepter.
-D'autres capacités arrivent (envoi et lecture d'emails avec garde-fous, recherche web) ; elles seront
-ajoutées ici au fur et à mesure.
+D'autres capacités arrivent (recherche web) ; elles seront ajoutées ici au fur et à mesure.
+
+### Les emails
+
+Les emails partent de la messagerie que le propriétaire a configurée sur sa box, par un service séparé
+qui applique ces règles **quoi que fasse l'agent** :
+
+- un seul email par adresse, pour toujours, tous agents confondus ;
+- jamais à quelqu'un qui a répondu « STOP » ou dont l'adresse n'existe pas ;
+- du lundi au samedi, de 8 h à 19 h (heure de la box) ;
+- une limite par jour pour la box (20 au début, puis elle double chaque semaine jusqu'au réglage du
+  propriétaire) et celle de votre manifeste (`mail_send`) ;
+- pause automatique si trop d'emails reviennent en erreur ou si trop de personnes se désinscrivent ;
+- texte simple uniquement : la box ajoute l'identité de l'expéditeur, la raison du message et
+  « répondez STOP ». Aucun pistage des ouvertures n'est possible.
+
+Un refus est une erreur avec un code (`agent.IsCode(err, agent.CodeAlreadyContacted)`…) : votre agent
+doit s'y attendre et passer à la suite. `campaign` et `variant` regroupent vos emails dans les
+statistiques de `MailStatus`, pratique pour des tests A/B.
 
 ## Un agent
 
@@ -100,7 +119,9 @@ func TestConseil(t *testing.T) {
 ```
 
 Les demandes d'accord se testent avec `box.Answer(id, true)` ou `box.Expire(id)`, qui renvoient le
-déclencheur du passage suivant. Voir [`examples/hello/main_test.go`](examples/hello/main_test.go).
+déclencheur du passage suivant. Pour les emails : `box.SentMail()` liste ce qui est parti, et
+`box.Reply`, `box.AutoReply`, `box.Unsubscribe`, `box.Bounce` simulent ce qui revient. Voir
+[`examples/hello/main_test.go`](examples/hello/main_test.go).
 
 ## Construire le paquet
 

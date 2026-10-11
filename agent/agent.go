@@ -84,11 +84,25 @@ func (e *Error) Error() string { return e.Code + ": " + e.Message }
 const (
 	CodePermission = "permission_denied"
 	CodeInvalid    = "invalid_params"
-	CodeQuota      = "quota_exceeded"
+	CodeQuota      = "quota_exceeded" // also: today's email limit is reached
 	CodeUnknown    = "unknown_method"
 	CodeTooMany    = "too_many_calls"
 	CodeFailed     = "failed"
+
+	// Refusals of the box's email guardrails (SendMail).
+	CodeNotConfigured    = "not_configured"    // no mailbox on this box
+	CodeAlreadyContacted = "already_contacted" // one email per address, ever
+	CodeOptedOut         = "opted_out"         // the person said STOP, or the address bounced
+	CodeOutsideHours     = "outside_hours"     // Monday to Saturday, 8:00 to 19:00 only
+	CodePaused           = "paused"            // too many bounces or opt-outs: the owner must resume
+	CodeBounced          = "bounced"           // the server refused this address
 )
+
+// IsCode reports whether err is a box error with this code.
+func IsCode(err error, code string) bool {
+	var e *Error
+	return errors.As(err, &e) && e.Code == code
+}
 
 // Box is the agent's connection to the box.
 type Box struct {
@@ -270,6 +284,99 @@ func (b *Box) RequestApproval(title, details string, data any, expiresHours int)
 	}
 	err := b.Call("approval.request", params, &r)
 	return r.ID, err
+}
+
+// Mail is a prospecting email (capability mail.send). The box adds the
+// sender's identity, the legal notice and how to opt out; it sends plain
+// text only.
+type Mail struct {
+	To      string `json:"to"`
+	Subject string `json:"subject"`
+	Body    string `json:"body"`
+	// Campaign and Variant group emails in the statistics (MailStatus),
+	// e.g. for A/B tests: up to 40 characters among a-z, 0-9, - and _.
+	Campaign string `json:"campaign,omitempty"`
+	Variant  string `json:"variant,omitempty"`
+}
+
+// MailSent describes a sent email.
+type MailSent struct {
+	ID int64 `json:"id"`
+	// Remaining is how many more emails the agent may send today.
+	Remaining int `json:"remaining"`
+}
+
+// SendMail sends a prospecting email. The box's guardrails apply whatever
+// the agent does: one email per address, ever; never to someone who said
+// STOP or whose address bounced; Monday to Saturday, 8:00 to 19:00; daily
+// limits; automatic pause. A refusal is an *Error with one of the Code…
+// constants (see IsCode).
+func (b *Box) SendMail(m Mail) (MailSent, error) {
+	var r MailSent
+	err := b.Call("mail.send", m, &r)
+	return r, err
+}
+
+// Reply is what came back for one of the agent's emails.
+type Reply struct {
+	ID int64 `json:"id"`
+	// Kind is "reply", "auto" (automatic reply, e.g. out of office),
+	// "unsubscribe" (the person opted out: the box already blocked the
+	// address) or "bounce" (the address does not exist).
+	Kind       string    `json:"kind"`
+	To         string    `json:"to"` // the address the agent wrote to
+	From       string    `json:"from,omitempty"`
+	Subject    string    `json:"subject,omitempty"`
+	Text       string    `json:"text,omitempty"` // what the person wrote, without the quoted email
+	Campaign   string    `json:"campaign,omitempty"`
+	Variant    string    `json:"variant,omitempty"`
+	SentAt     time.Time `json:"sent_at"`
+	ReceivedAt time.Time `json:"received_at"`
+}
+
+// Replies returns what came back for the agent's emails after the cursor
+// after (0 the first time; keep next in storage), at most limit (100).
+// Capability mail.read. The box reads the replies every few minutes.
+func (b *Box) Replies(after int64, limit int) (replies []Reply, next int64, err error) {
+	var r struct {
+		Replies []Reply `json:"replies"`
+		Next    int64   `json:"next"`
+	}
+	err = b.Call("mail.replies", map[string]any{"after": after, "limit": limit}, &r)
+	return r.Replies, r.Next, err
+}
+
+// MailStat counts what came of the agent's emails, by campaign and
+// variant (opens are not measured: no tracking).
+type MailStat struct {
+	Campaign     string `json:"campaign"`
+	Variant      string `json:"variant"`
+	Sent         int    `json:"sent"`
+	Replied      int    `json:"replied"`
+	AutoReplies  int    `json:"auto_replies"`
+	Unsubscribed int    `json:"unsubscribed"`
+	Bounced      int    `json:"bounced"`
+}
+
+// MailStatus is the state of the box's email, for the agent.
+type MailStatus struct {
+	Configured     bool       `json:"configured"`
+	Paused         bool       `json:"paused"`
+	WindowOpen     bool       `json:"window_open"`
+	NextWindow     *time.Time `json:"next_window,omitempty"`
+	SentToday      int        `json:"sent_today"`  // the box's, all agents
+	LimitToday     int        `json:"limit_today"` // the box's
+	AgentSentToday int        `json:"agent_sent_today"`
+	AgentLimit     int        `json:"agent_limit"` // the manifest's mail_send
+	Stats          []MailStat `json:"stats"`
+}
+
+// MailStatus returns the state of the box's email and the agent's
+// figures (capability mail.send or mail.read).
+func (b *Box) MailStatus() (MailStatus, error) {
+	var r MailStatus
+	err := b.Call("mail.status", map[string]any{}, &r)
+	return r, err
 }
 
 // --- entry point ---------------------------------------------------------------------

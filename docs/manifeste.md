@@ -40,6 +40,8 @@ Au-delà de `memory_mb`, l'agent est tué ; au-delà de `timeout_min`, le passag
 | `schedule = ["…"]` | se lancer seul à ces horaires, 8 max |
 | `notify = true` | envoyer des notifications au propriétaire et aux administrateurs |
 | `approval = true` | leur demander un accord |
+| `mail_send = N` | envoyer jusqu'à N emails par jour (200 max), avec les garde-fous de la box |
+| `mail_read = true` | lire les réponses à ses propres emails |
 
 Ne demandez que ce qui sert : chaque capacité est montrée au propriétaire, qui doit toutes les accepter.
 Une mise à jour qui en demande une nouvelle est signalée.

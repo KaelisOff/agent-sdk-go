@@ -72,6 +72,16 @@ type Box struct {
 	Approvals     []*Approval
 	// Runs counts the runs so far.
 	Runs int
+
+	// Email (capabilities mail.send and mail.read): the box's daily limit
+	// (DefaultMailLimit when 0), a box without a mailbox, a pause of the
+	// brakes. See SentMail, Reply, Unsubscribe, Bounce.
+	MailLimit  int
+	NoMailbox  bool
+	MailPaused bool
+
+	mailState *mailState
+	runNow    time.Time
 }
 
 // Notification is a notification sent by the agent.
@@ -179,6 +189,7 @@ func (b *Box) Run(h agent.Handler, trig agent.Trigger) Result {
 	if now.IsZero() {
 		now = time.Now()
 	}
+	b.runNow = now.In(loc)
 	info := agent.Run{
 		ID: fmt.Sprintf("run-%d", b.Runs), Trigger: trig, AgentID: b.Manifest.ID, Version: b.Manifest.Version,
 		Now: now.In(loc), TimeZone: loc.String(), Locale: "fr-FR",
@@ -334,6 +345,12 @@ func (b *Box) call(method string, raw json.RawMessage) (any, *callError) {
 		return b.notify(raw)
 	case "approval.request":
 		return b.approval(raw)
+	case "mail.send":
+		return b.mailSend(raw)
+	case "mail.replies":
+		return b.mailReplies(raw)
+	case "mail.status":
+		return b.mailStatus()
 	default:
 		return nil, fail(agent.CodeUnknown, "unknown method %s", method)
 	}
