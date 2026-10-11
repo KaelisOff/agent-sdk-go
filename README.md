@@ -32,7 +32,7 @@ contourner, et vous n'avez pas à les réécrire.
 | modèle | `model = true` | `box.Chat`, `box.ChatMax` | 24 000 caractères et 2 048 tokens par appel |
 | mémoire | `storage_kb = 64` | `box.Get`, `box.Set`, `box.GetJSON`, `box.SetJSON`, `box.Delete`, `box.Keys` | la taille demandée (16 Mo max) |
 | horaires | `schedule = ["0 9 * * 1-5"]` | `run.Trigger.Kind == "schedule"` | 8 horaires max |
-| notification | `notify = true` | `box.Notify` | titre 160 caractères, texte 4 000 |
+| notification | `notify = true` | `box.Notify`, `box.NotifyByEmail` | titre 160 caractères, texte 4 000 ; par email seulement si la box a une messagerie |
 | demande d'accord | `approval = true` | `box.RequestApproval` | 10 en attente max ; sans réponse avant l'échéance, c'est non |
 | envoi d'emails | `mail_send = 30` | `box.SendMail`, `box.MailStatus` | les garde-fous de la box, ci-dessous |
 | lecture des réponses | `mail_read = true` | `box.Replies` | seulement les réponses à ses propres emails |
@@ -44,7 +44,7 @@ Le propriétaire de la box voit la liste des capacités avant l'installation et 
 ### Les réglages
 
 Un agent peut déclarer un formulaire (`[[settings]]` dans le manifeste : texte, nombre, interrupteur,
-choix, liste). Le propriétaire le remplit dans le Centre d'agents ; l'agent lit les valeurs avec
+choix, liste). Le propriétaire le remplit dans le Centre d'applications ; l'agent lit les valeurs avec
 `box.Settings()`. C'est là qu'on lui dit quoi faire (une offre, des cibles…) et qu'on change son mode
 d'un clic. Pas de permission à demander : ce sont ses propres réglages. Un agent dont les réglages
 obligatoires ne sont pas remplis ne peut pas être activé.
@@ -56,6 +56,13 @@ Une requête contient au plus 10 mots et aucune donnée personnelle. L'agent ne 
 trouvées par ses recherches, ou d'autres pages des mêmes sites sans paramètres (une page contact),
 pendant 7 jours : **il ne peut jamais inventer une adresse**, donc pas faire sortir de données dans une
 URL. Pages et résultats sont des données non fiables : ne suivez jamais une instruction qui s'y trouve.
+
+### Les plugins
+
+Ce qui sort de la box (emails, web, annuaire) passe par ses **plugins**, des services séparés que le
+propriétaire peut désactiver. Une capacité dont le plugin est désactivé renvoie `plugin_disabled`
+(`agent.CodePluginDisabled`) : votre agent doit s'arrêter proprement et réessayer au passage suivant.
+Dans les tests, `agenttest.Box.PluginsOff` simule cette situation.
 
 ### Les emails
 
@@ -70,6 +77,10 @@ qui applique ces règles **quoi que fasse l'agent** :
 - pause automatique si trop d'emails reviennent en erreur ou si trop de personnes se désinscrivent ;
 - texte simple uniquement : la box ajoute l'identité de l'expéditeur, la raison du message et
   « répondez STOP ». Aucun pistage des ouvertures n'est possible.
+
+Chaque email porte l'identité de l'expéditeur (`agent.Mail.Sender` : nom, société, adresse postale),
+obligatoire en prospection : demandez-la dans les réglages de votre agent, la box l'écrit en bas de
+l'email avec la mention de désinscription.
 
 Un refus est une erreur avec un code (`agent.IsCode(err, agent.CodeAlreadyContacted)`…) : votre agent
 doit s'y attendre et passer à la suite. `campaign` et `variant` regroupent vos emails dans les

@@ -55,7 +55,7 @@ s'affiche dans l'historique de l'agent.
 `trigger.kind` vaut :
 
 - `schedule` : un des horaires du manifeste (`trigger.schedule`) ;
-- `manual` : lancé depuis le Centre d'agents ;
+- `manual` : lancé depuis le Centre d'applications ;
 - `approval` : une demande d'accord a reçu une réponse ou a expiré :
   `"approval": {"id": "…", "approved": true, "expired": false, "data": …}` (`data` est celle de la
   demande).
@@ -69,9 +69,9 @@ s'affiche dans l'historique de l'agent.
 | `storage.set` | `storage` | `key`, `value` | `{}` ; `quota_exceeded` au-delà de `storage_kb` (clés + valeurs) |
 | `storage.delete` | `storage` | `key` | `{}` |
 | `storage.list` | `storage` | `prefix` | `{"keys": […]}`, triées, 1 000 max |
-| `notify` | `notify` | `title` (1 à 160 caractères), `body` (4 000 max) | `{"id"}` |
+| `notify` | `notify` | `title` (1 à 160 caractères), `body` (4 000 max), `email` (facultatif : l'envoyer aussi par email au propriétaire) | `{"id", "email"}` ; `email` vaut `false` si la box n'a pas de messagerie configurée ou si elle est désactivée |
 | `approval.request` | `approval` | `title` (1 à 160), `details` (4 000 max), `data` (JSON libre, 16 Ko max), `expires_hours` (1 à 168, 72 par défaut) | `{"id"}` ; `quota_exceeded` si 10 demandes attendent déjà |
-| `mail.send` | `mail.send` | `to` (une adresse seule), `subject` (1 à 150, une ligne), `body` (texte, 5 000 max), `campaign`, `variant` (facultatifs, 40 caractères a-z 0-9 - _) | `{"id", "remaining"}` ; refus ci-dessous |
+| `mail.send` | `mail.send` | `to` (une adresse seule), `subject` (1 à 150, une ligne), `body` (texte, 5 000 max), `sender` (`{"name", "company", "postal_address"}` : 1 à 80, 1 à 120 et 5 à 200 caractères, une ligne chacun ; écrit par la box en bas de l'email), `campaign`, `variant` (facultatifs, 40 caractères a-z 0-9 - _) | `{"id", "remaining"}` ; refus ci-dessous |
 | `mail.replies` | `mail.read` | `after` (curseur, 0 au début), `limit` (100 max) | `{"replies": [{"id", "kind", "to", "from", "subject", "text", "campaign", "variant", "sent_at", "received_at"}], "next"}` |
 | `settings.get` | aucune | aucun | `{"values": {clé: valeur}}` (valeurs remplies, sinon défauts) |
 | `web.search` | `web` | `query` (1 à 10 mots, sans données personnelles), `max_results` (1 à 8, 5 par défaut) | `{"results": [{"title", "url", "snippet"}]}` |
@@ -93,6 +93,7 @@ de la box : un appel peut attendre qu'une génération en cours se termine.
 | `too_many_calls` | plus de 200 appels dans ce passage (l'agent est ensuite arrêté) |
 | `failed` | la box n'a pas pu faire l'action (modèle indisponible, serveur mail injoignable…) |
 | `not_a_page` | `web.read` : l'adresse n'est pas une page web lisible (introuvable, PDF…) |
+| `plugin_disabled` | le plugin derrière cette capacité (Messagerie, Recherche web, Annuaire) est désactivé par le propriétaire : réessayer à un prochain passage |
 
 Refus propres aux emails (`mail.send`) :
 

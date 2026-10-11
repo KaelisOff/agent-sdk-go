@@ -80,6 +80,11 @@ type Box struct {
 	NoMailbox  bool
 	MailPaused bool
 
+	// PluginsOff are the box's plugins the owner turned off ("mail",
+	// "web", "companies"): their capabilities fail with
+	// agent.CodePluginDisabled.
+	PluginsOff []string
+
 	// Settings are the values of the agent's form (manifest [[settings]]);
 	// the defaults apply to the others, like on a box.
 	Settings map[string]any
@@ -99,9 +104,11 @@ type Box struct {
 	runNow    time.Time
 }
 
-// Notification is a notification sent by the agent.
+// Notification is a notification sent by the agent. Email: it was also
+// emailed to the owner (NotifyByEmail, with a mailbox set up).
 type Notification struct {
 	Title, Body string
+	Email       bool
 }
 
 // Approval is a request for approval sent by the agent.
@@ -335,8 +342,19 @@ func (b *Box) need(c string) *callError {
 	if !b.Manifest.Permissions.Has(c) {
 		return fail(agent.CodePermission, "capability %s was not granted to this agent", c)
 	}
+	if p := pluginOf[c]; p != "" && !b.pluginOn(p) {
+		return fail(agent.CodePluginDisabled, "the %s plugin is turned off on this box", p)
+	}
 	return nil
 }
+
+// pluginOf maps capabilities to the plugin providing them.
+var pluginOf = map[string]string{
+	manifest.CapMailSend: "mail", manifest.CapMailRead: "mail",
+	manifest.CapWeb: "web", manifest.CapCompany: "companies",
+}
+
+func (b *Box) pluginOn(id string) bool { return !slices.Contains(b.PluginsOff, id) }
 
 func decode(raw json.RawMessage, v any) *callError {
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -484,6 +502,7 @@ func (b *Box) notify(raw json.RawMessage) (any, *callError) {
 	var p struct {
 		Title string `json:"title"`
 		Body  string `json:"body"`
+		Email bool   `json:"email"`
 	}
 	if err := decode(raw, &p); err != nil {
 		return nil, err
@@ -491,8 +510,9 @@ func (b *Box) notify(raw json.RawMessage) (any, *callError) {
 	if p.Title == "" || utf8.RuneCountInString(p.Title) > MaxTitle || utf8.RuneCountInString(p.Body) > MaxBody {
 		return nil, fail(agent.CodeInvalid, "title: 1 to %d characters, body: up to %d", MaxTitle, MaxBody)
 	}
-	b.Notifications = append(b.Notifications, Notification{Title: p.Title, Body: p.Body})
-	return map[string]any{"id": fmt.Sprintf("ntf-%d", len(b.Notifications))}, nil
+	emailed := p.Email && !b.NoMailbox && b.pluginOn("mail")
+	b.Notifications = append(b.Notifications, Notification{Title: p.Title, Body: p.Body, Email: emailed})
+	return map[string]any{"id": fmt.Sprintf("ntf-%d", len(b.Notifications)), "email": emailed}, nil
 }
 
 func (b *Box) approval(raw json.RawMessage) (any, *callError) {

@@ -22,6 +22,8 @@ mail_send = 3
 mail_read = true
 `
 
+var claire = agent.Sender{Name: "Claire Martin", Company: "Cabinet Martin", PostalAddress: "12 rue de la Paix, 75002 Paris"}
+
 func mailBox(t *testing.T) *agenttest.Box {
 	t.Helper()
 	box, err := agenttest.New([]byte(mailManifest))
@@ -38,7 +40,7 @@ func TestMailGuardrails(t *testing.T) {
 	box := mailBox(t)
 	var got []string
 	send := func(b *agent.Box, to string) {
-		_, err := b.SendMail(agent.Mail{To: to, Subject: "Une offre", Body: "Bonjour.", Campaign: "plombiers", Variant: "a"})
+		_, err := b.SendMail(agent.Mail{To: to, Subject: "Une offre", Body: "Bonjour.", Sender: claire, Campaign: "plombiers", Variant: "a"})
 		var e *agent.Error
 		switch {
 		case err == nil:
@@ -91,7 +93,7 @@ func TestMailRepliesAndStatus(t *testing.T) {
 	box := mailBox(t)
 	box.Run(func(b *agent.Box, _ agent.Run) (string, error) {
 		for _, to := range []string{"jean@plombier.fr", "paul@menuisier.fr", "luc@peintre.fr"} {
-			if _, err := b.SendMail(agent.Mail{To: to, Subject: "Une offre", Body: "Bonjour.", Campaign: "plombiers", Variant: "a"}); err != nil {
+			if _, err := b.SendMail(agent.Mail{To: to, Subject: "Une offre", Body: "Bonjour.", Sender: claire, Campaign: "plombiers", Variant: "a"}); err != nil {
 				return "", err
 			}
 		}
@@ -126,7 +128,7 @@ func TestMailRepliesAndStatus(t *testing.T) {
 	}
 	// A STOP blocks the address for good.
 	res = box.Run(func(b *agent.Box, _ agent.Run) (string, error) {
-		_, err := b.SendMail(agent.Mail{To: "paul@menuisier.fr", Subject: "Relance", Body: "Bonjour."})
+		_, err := b.SendMail(agent.Mail{To: "paul@menuisier.fr", Subject: "Relance", Body: "Bonjour.", Sender: claire})
 		if !agent.IsCode(err, agent.CodeAlreadyContacted) && !agent.IsCode(err, agent.CodeOptedOut) {
 			t.Errorf("after STOP: %v", err)
 		}
@@ -138,7 +140,7 @@ func TestMailNeedsItsCapabilities(t *testing.T) {
 	box := newBox(t, manifestTOML) // asks for no email capability
 	var codes []string
 	box.Run(func(b *agent.Box, _ agent.Run) (string, error) {
-		_, err := b.SendMail(agent.Mail{To: "jean@plombier.fr", Subject: "s", Body: "b"})
+		_, err := b.SendMail(agent.Mail{To: "jean@plombier.fr", Subject: "s", Body: "b", Sender: claire})
 		codes = append(codes, code(err))
 		_, _, err = b.Replies(0, 10)
 		codes = append(codes, code(err))
@@ -148,5 +150,60 @@ func TestMailNeedsItsCapabilities(t *testing.T) {
 	}, agenttest.Manual())
 	if strings.Join(codes, ",") != "permission_denied,permission_denied,permission_denied" {
 		t.Errorf("codes = %v", codes)
+	}
+}
+
+func TestMailSender(t *testing.T) {
+	box := mailBox(t)
+	var codes []string
+	box.Run(func(b *agent.Box, _ agent.Run) (string, error) {
+		for _, s := range []agent.Sender{{}, {Name: "Claire", Company: "Cabinet", PostalAddress: "12 rue\nParis"}, claire} {
+			_, err := b.SendMail(agent.Mail{To: "jean@plombier.fr", Subject: "Une offre", Body: "Bonjour.", Sender: s})
+			var e *agent.Error
+			if asError(err, &e) {
+				codes = append(codes, e.Code)
+			} else {
+				codes = append(codes, "ok")
+			}
+		}
+		return "", nil
+	}, agenttest.Manual())
+	if strings.Join(codes, ",") != "invalid_params,invalid_params,ok" {
+		t.Errorf("codes = %v", codes)
+	}
+	if sent := box.SentMail(); len(sent) != 1 || sent[0].Sender.Company != "Cabinet Martin" {
+		t.Errorf("sent = %+v", sent)
+	}
+}
+
+func TestPluginsOffAndNotifyByEmail(t *testing.T) {
+	box := mailBox(t)
+	box.Manifest.Permissions.Notify = true
+	box.PluginsOff = []string{"mail"}
+	var code string
+	var emailed []bool
+	box.Run(func(b *agent.Box, _ agent.Run) (string, error) {
+		_, err := b.SendMail(agent.Mail{To: "jean@plombier.fr", Subject: "Une offre", Body: "Bonjour.", Sender: claire})
+		if agent.IsCode(err, agent.CodePluginDisabled) {
+			code = agent.CodePluginDisabled
+		}
+		ok, err := b.NotifyByEmail("Point du jour", "Rien")
+		if err != nil {
+			return "", err
+		}
+		emailed = append(emailed, ok)
+		return "", nil
+	}, agenttest.Manual())
+	box.PluginsOff = nil
+	box.Run(func(b *agent.Box, _ agent.Run) (string, error) {
+		ok, err := b.NotifyByEmail("Point du jour", "Rien")
+		emailed = append(emailed, ok)
+		return "", err
+	}, agenttest.Manual())
+	if code != agent.CodePluginDisabled || len(emailed) != 2 || emailed[0] || !emailed[1] {
+		t.Errorf("code = %q, emailed = %v", code, emailed)
+	}
+	if n := box.Notifications; len(n) != 2 || n[0].Email || !n[1].Email {
+		t.Errorf("notifications = %+v", n)
 	}
 }

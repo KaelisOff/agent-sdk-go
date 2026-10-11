@@ -129,6 +129,10 @@ func (b *Box) mailSend(raw json.RawMessage) (any, *callError) {
 	if n := utf8.RuneCountInString(body); n == 0 || n > MaxMailBody {
 		return nil, fail(agent.CodeInvalid, "body: 1 to %d characters", MaxMailBody)
 	}
+	sender, cerr := checkSender(p.Sender)
+	if cerr != nil {
+		return nil, cerr
+	}
 	m := b.mail()
 	now := b.runNow
 	switch {
@@ -150,6 +154,7 @@ func (b *Box) mailSend(raw json.RawMessage) (any, *callError) {
 		return nil, fail(agent.CodeQuota, "daily limit reached")
 	}
 	p.To, p.Subject, p.Body = to, subject, body
+	p.Sender = sender
 	m.contacted[to] = true
 	m.sent = append(m.sent, SentMail{Mail: p, ID: int64(len(m.sent) + 1), SentAt: now})
 	return agent.MailSent{ID: int64(len(m.sent)), Remaining: min(limit, b.Manifest.Permissions.MailSend) - today - 1}, nil
@@ -238,4 +243,24 @@ func (b *Box) mailStatus() (any, *callError) {
 		}
 	}
 	return st, nil
+}
+
+// checkSender applies the box's rules to the sender's identity.
+func checkSender(s agent.Sender) (agent.Sender, *callError) {
+	for _, f := range []struct {
+		name     string
+		value    *string
+		min, max int
+	}{
+		{"sender.name", &s.Name, 1, 80},
+		{"sender.company", &s.Company, 1, 120},
+		{"sender.postal_address", &s.PostalAddress, 5, 200},
+	} {
+		*f.value = strings.TrimSpace(*f.value)
+		n := utf8.RuneCountInString(*f.value)
+		if n < f.min || n > f.max || strings.ContainsAny(*f.value, "\r\n\t") || !utf8.ValidString(*f.value) {
+			return s, fail(agent.CodeInvalid, "%s: %d to %d characters on one line", f.name, f.min, f.max)
+		}
+	}
+	return s, nil
 }

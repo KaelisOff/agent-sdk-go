@@ -13,7 +13,7 @@ s'il demandait moins.
 | Clé | Obligatoire | Règle |
 |---|---|---|
 | `id` | oui | identifiant inversé, en minuscules, 3 à 7 parties : `io.github.votre-compte.mon-agent`, ou `fr.mondomaine.mon-agent` si vous avez un domaine. Il doit désigner un compte ou un domaine **que vous contrôlez** : le magasin le vérifiera. |
-| `name` | oui | 1 à 60 caractères, affiché dans le Centre d'agents |
+| `name` | oui | 1 à 60 caractères, affiché dans le Centre d'applications |
 | `version` | oui | `MAJEUR.MINEUR.CORRECTIF`, ex. `1.4.0` |
 | `description` | non | 2 000 caractères max |
 | `author` | non | vous |
@@ -68,7 +68,7 @@ Un horaire manqué pendant que la box était éteinte n'est pas rattrapé.
 
 ## `[[settings]]` : le formulaire de l'agent
 
-Chaque bloc déclare un champ, que le propriétaire remplit dans le Centre d'agents (30 champs max) :
+Chaque bloc déclare un champ, que le propriétaire remplit dans le Centre d'applications (30 champs max) :
 
 | Clé | Règle |
 |---|---|

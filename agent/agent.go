@@ -99,6 +99,10 @@ const (
 
 	// ReadPage: the address is not a readable web page (missing, PDF…).
 	CodeNotAPage = "not_a_page"
+
+	// The plugin behind a capability (Messagerie, Recherche web, Annuaire)
+	// is turned off on this box: the owner chose so. Retry on a later run.
+	CodePluginDisabled = "plugin_disabled"
 )
 
 // IsCode reports whether err is a box error with this code.
@@ -274,6 +278,18 @@ func (b *Box) Notify(title, body string) error {
 	return b.Call("notify", map[string]string{"title": title, "body": body}, nil)
 }
 
+// NotifyByEmail sends a notification that the box also emails to the
+// owner's mailbox (for a daily report, say). emailed is false when the box
+// has no mailbox set up or its Messagerie plugin is off: the notification
+// is then only on the box. Capability notify.
+func (b *Box) NotifyByEmail(title, body string) (emailed bool, err error) {
+	var r struct {
+		Email bool `json:"email"`
+	}
+	err = b.Call("notify", map[string]any{"title": title, "body": body, "email": true}, &r)
+	return r.Email, err
+}
+
 // RequestApproval asks the owner or an admin (capability "approval").
 // The answer comes in a later run, whose trigger is "approval" and carries
 // data back. No answer before expiry (in hours, 72 by default) means no.
@@ -296,10 +312,23 @@ type Mail struct {
 	To      string `json:"to"`
 	Subject string `json:"subject"`
 	Body    string `json:"body"`
+	// Sender is who signs the email, written by the box at the bottom with
+	// the opt-out. Required: take it from the agent's settings (the
+	// owner's name, company and postal address).
+	Sender Sender `json:"sender"`
 	// Campaign and Variant group emails in the statistics (MailStatus),
 	// e.g. for A/B tests: up to 40 characters among a-z, 0-9, - and _.
 	Campaign string `json:"campaign,omitempty"`
 	Variant  string `json:"variant,omitempty"`
+}
+
+// Sender is the identity at the bottom of a prospecting email, required
+// by law: a name (1 to 80 characters), a company (1 to 120) and a postal
+// address (5 to 200), each on one line.
+type Sender struct {
+	Name          string `json:"name"`
+	Company       string `json:"company"`
+	PostalAddress string `json:"postal_address"`
 }
 
 // MailSent describes a sent email.
