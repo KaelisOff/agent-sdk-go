@@ -1,0 +1,18 @@
+id = "io.github.kaelisoff.hello"
+name = "Conseil du jour"
+version = "0.1.0"
+description = "Agent d'exemple : chaque matin de semaine, un conseil court, envoyé en notification. Tous les trois conseils, il demande s'il doit continuer."
+author = "Kaelis"
+license = "Apache-2.0"
+source = "https://github.com/KaelisOff/agent-sdk-go"
+
+[run]
+memory_mb = 64
+timeout_min = 5
+
+[permissions]
+model = true
+notify = true
+approval = true
+storage_kb = 16
+schedule = ["0 9 * * 1-5"]
