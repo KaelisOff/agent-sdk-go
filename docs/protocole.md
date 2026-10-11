@@ -73,6 +73,10 @@ s'affiche dans l'historique de l'agent.
 | `approval.request` | `approval` | `title` (1 à 160), `details` (4 000 max), `data` (JSON libre, 16 Ko max), `expires_hours` (1 à 168, 72 par défaut) | `{"id"}` ; `quota_exceeded` si 10 demandes attendent déjà |
 | `mail.send` | `mail.send` | `to` (une adresse seule), `subject` (1 à 150, une ligne), `body` (texte, 5 000 max), `campaign`, `variant` (facultatifs, 40 caractères a-z 0-9 - _) | `{"id", "remaining"}` ; refus ci-dessous |
 | `mail.replies` | `mail.read` | `after` (curseur, 0 au début), `limit` (100 max) | `{"replies": [{"id", "kind", "to", "from", "subject", "text", "campaign", "variant", "sent_at", "received_at"}], "next"}` |
+| `settings.get` | aucune | aucun | `{"values": {clé: valeur}}` (valeurs remplies, sinon défauts) |
+| `web.search` | `web` | `query` (1 à 10 mots, sans données personnelles), `max_results` (1 à 8, 5 par défaut) | `{"results": [{"title", "url", "snippet"}]}` |
+| `web.read` | `web` | `url` : une page trouvée par `web.search`, ou une autre page du même site sans paramètres (7 jours) | `{"url", "title", "text", "links": [{"text", "url"}]}` ; `not_a_page` si illisible |
+| `companies.search` | `companies` | `text`, `activities` (codes NAF), `postal_code`, `department`, `city_code`, `sizes`, `sole_traders`, `page`, `per_page` (25 max) | `{"companies": [{"siren", "siret", "name", "trade_name", "activity", "address", "postal_code", "city", "department", "size", "category", "sole_trader", "created"}], "total", "page", "pages"}` |
 | `mail.status` | `mail.send` ou `mail.read` | aucun | `{"configured", "paused", "window_open", "next_window", "sent_today", "limit_today", "agent_sent_today", "agent_limit", "stats": [{"campaign", "variant", "sent", "replied", "auto_replies", "unsubscribed", "bounced"}]}` |
 
 Les paramètres inconnus sont refusés (`invalid_params`). Le modèle est partagé avec les conversations
@@ -88,6 +92,7 @@ de la box : un appel peut attendre qu'une génération en cours se termine.
 | `unknown_method` | méthode inconnue de cette box |
 | `too_many_calls` | plus de 200 appels dans ce passage (l'agent est ensuite arrêté) |
 | `failed` | la box n'a pas pu faire l'action (modèle indisponible, serveur mail injoignable…) |
+| `not_a_page` | `web.read` : l'adresse n'est pas une page web lisible (introuvable, PDF…) |
 
 Refus propres aux emails (`mail.send`) :
 

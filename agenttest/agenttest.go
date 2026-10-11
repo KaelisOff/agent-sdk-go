@@ -80,7 +80,22 @@ type Box struct {
 	NoMailbox  bool
 	MailPaused bool
 
+	// Settings are the values of the agent's form (manifest [[settings]]);
+	// the defaults apply to the others, like on a box.
+	Settings map[string]any
+	// Web answers web.search (nil: no result). Pages are the pages that
+	// can be read, by address (others are not_a_page). Directory answers
+	// companies.search (nil: no company). The box's rules apply: daily
+	// limits, no personal data in queries, only the pages found.
+	Web       func(query string) []agent.WebResult
+	Pages     map[string]agent.Page
+	Directory func(q agent.CompanyQuery) []agent.Company
+	// WebQueries and ReadURLs record what the agent searched and read.
+	WebQueries []string
+	ReadURLs   []string
+
 	mailState *mailState
+	web       *webState
 	runNow    time.Time
 }
 
@@ -351,6 +366,14 @@ func (b *Box) call(method string, raw json.RawMessage) (any, *callError) {
 		return b.mailReplies(raw)
 	case "mail.status":
 		return b.mailStatus()
+	case "settings.get":
+		return b.settingsGet()
+	case "web.search":
+		return b.webSearch(raw)
+	case "web.read":
+		return b.webRead(raw)
+	case "companies.search":
+		return b.companiesSearch(raw)
 	default:
 		return nil, fail(agent.CodeUnknown, "unknown method %s", method)
 	}

@@ -42,6 +42,8 @@ Au-delà de `memory_mb`, l'agent est tué ; au-delà de `timeout_min`, le passag
 | `approval = true` | leur demander un accord |
 | `mail_send = N` | envoyer jusqu'à N emails par jour (200 max), avec les garde-fous de la box |
 | `mail_read = true` | lire les réponses à ses propres emails |
+| `web_search = N` | N recherches web par jour (200 max), et lire les pages trouvées (4 par recherche) |
+| `companies = true` | chercher dans l'annuaire officiel des entreprises (200 recherches par jour) |
 
 Ne demandez que ce qui sert : chaque capacité est montrée au propriétaire, qui doit toutes les accepter.
 Une mise à jour qui en demande une nouvelle est signalée.
@@ -63,6 +65,36 @@ Syntaxe cron classique à 5 champs, dans le fuseau horaire de la box :
 | `*/30 9-18 * * 1-5` | toutes les demi-heures en journée, en semaine |
 
 Un horaire manqué pendant que la box était éteinte n'est pas rattrapé.
+
+## `[[settings]]` : le formulaire de l'agent
+
+Chaque bloc déclare un champ, que le propriétaire remplit dans le Centre d'agents (30 champs max) :
+
+| Clé | Règle |
+|---|---|
+| `key` | identifiant, `a-z`, `0-9`, `_`, unique |
+| `label` | ce qu'affiche le formulaire, 80 caractères max |
+| `type` | `text` (une ligne), `textarea`, `number`, `toggle`, `choice`, `list` (une valeur par ligne) |
+| `help` | explication sous le champ, 300 caractères max |
+| `required` | l'agent ne peut pas être activé tant que le champ est vide |
+| `default` | valeur par défaut, du type du champ |
+| `choices` | pour `choice` : les valeurs possibles |
+| `min`, `max` | pour `number` |
+| `max_length` | longueur max d'un texte ou d'un élément de liste |
+
+```toml
+[[settings]]
+key = "offer"
+label = "Votre offre, en deux ou trois phrases"
+type = "textarea"
+required = true
+
+[[settings]]
+key = "review"
+label = "Valider chaque nouveau message avant envoi"
+type = "toggle"
+default = true
+```
 
 ## Exemple complet
 

@@ -96,6 +96,9 @@ const (
 	CodeOutsideHours     = "outside_hours"     // Monday to Saturday, 8:00 to 19:00 only
 	CodePaused           = "paused"            // too many bounces or opt-outs: the owner must resume
 	CodeBounced          = "bounced"           // the server refused this address
+
+	// ReadPage: the address is not a readable web page (missing, PDF…).
+	CodeNotAPage = "not_a_page"
 )
 
 // IsCode reports whether err is a box error with this code.
@@ -376,6 +379,150 @@ type MailStatus struct {
 func (b *Box) MailStatus() (MailStatus, error) {
 	var r MailStatus
 	err := b.Call("mail.status", map[string]any{}, &r)
+	return r, err
+}
+
+// --- settings ------------------------------------------------------------------------
+
+// Settings are the values of the agent's form (manifest [[settings]]), as
+// filled in by the owner in the Agent Center, with the defaults for the
+// others. Texts and choices are strings, numbers float64, toggles bool,
+// lists []string.
+type Settings map[string]any
+
+// String returns a text or choice setting ("" if unset).
+func (s Settings) String(key string) string { v, _ := s[key].(string); return v }
+
+// Bool returns a toggle setting (false if unset).
+func (s Settings) Bool(key string) bool { v, _ := s[key].(bool); return v }
+
+// Number returns a number setting (0 if unset).
+func (s Settings) Number(key string) float64 { v, _ := s[key].(float64); return v }
+
+// List returns a list setting (nil if unset).
+func (s Settings) List(key string) []string {
+	switch v := s[key].(type) {
+	case []string:
+		return v
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, it := range v {
+			if str, ok := it.(string); ok {
+				out = append(out, str)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// Settings reads the agent's settings. No capability is needed.
+func (b *Box) Settings() (Settings, error) {
+	var r struct {
+		Values Settings `json:"values"`
+	}
+	err := b.Call("settings.get", map[string]any{}, &r)
+	if r.Values == nil {
+		r.Values = Settings{}
+	}
+	return r.Values, err
+}
+
+// --- web -----------------------------------------------------------------------------
+
+// WebResult is a search result: untrusted data, never instructions.
+type WebResult struct {
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Snippet string `json:"snippet"`
+}
+
+// WebSearch searches the web (capability web): at most 10 words, no
+// personal data (the box refuses emails, phone numbers, IBAN…), up to
+// max results (1 to 8; 0 means 5). Counted in the manifest's daily
+// web_search.
+func (b *Box) WebSearch(query string, max int) ([]WebResult, error) {
+	var r struct {
+		Results []WebResult `json:"results"`
+	}
+	err := b.Call("web.search", map[string]any{"query": query, "max_results": max}, &r)
+	return r.Results, err
+}
+
+// Page is a web page read by the box: its visible text (hidden content,
+// scripts and comments removed) and its links (http(s) and mailto).
+// Untrusted data, never instructions.
+type Page struct {
+	URL   string `json:"url"` // after redirects
+	Title string `json:"title"`
+	Text  string `json:"text"`
+	Links []Link `json:"links"`
+}
+
+// Link is a link of a page.
+type Link struct {
+	Text string `json:"text,omitempty"`
+	URL  string `json:"url"`
+}
+
+// ReadPage reads a page (capability web). Only pages found by WebSearch,
+// or other pages of those sites without parameters (a contact page…),
+// within 7 days: an agent cannot make up an address. 4 reads per search
+// allowed a day.
+func (b *Box) ReadPage(url string) (Page, error) {
+	var p Page
+	err := b.Call("web.read", map[string]string{"url": url}, &p)
+	return p, err
+}
+
+// --- company directory -----------------------------------------------------------------
+
+// CompanyQuery searches the official French company directory (INSEE's
+// SIRENE register). At least one of Text, Activities or a place.
+type CompanyQuery struct {
+	Text        string   `json:"text,omitempty"`       // words of the name or activity
+	Activities  []string `json:"activities,omitempty"` // NAF codes, e.g. "43.22A"
+	PostalCode  string   `json:"postal_code,omitempty"`
+	Department  string   `json:"department,omitempty"` // "75", "2A", "974"
+	CityCode    string   `json:"city_code,omitempty"`  // INSEE commune code
+	Sizes       []string `json:"sizes,omitempty"`      // headcount bands: "NN", "00", "01", "02", "03", "11"…
+	SoleTraders *bool    `json:"sole_traders,omitempty"`
+	Page        int      `json:"page,omitempty"`     // 1 to 400
+	PerPage     int      `json:"per_page,omitempty"` // 1 to 25 (10 by default)
+}
+
+// Company is public data about an active company, at its establishment
+// matching the search (or its head office). Never the people behind it;
+// companies whose details are not public are left out by the box.
+type Company struct {
+	SIREN      string `json:"siren"`
+	SIRET      string `json:"siret"`
+	Name       string `json:"name"`
+	TradeName  string `json:"trade_name,omitempty"`
+	Activity   string `json:"activity"` // NAF code
+	Address    string `json:"address"`
+	PostalCode string `json:"postal_code"`
+	City       string `json:"city"`
+	Department string `json:"department"`
+	Size       string `json:"size"`
+	Category   string `json:"category"` // PME, ETI, GE
+	SoleTrader bool   `json:"sole_trader"`
+	Created    string `json:"created"`
+}
+
+// CompanyPage is a page of results.
+type CompanyPage struct {
+	Companies []Company `json:"companies"`
+	Total     int       `json:"total"`
+	Page      int       `json:"page"`
+	Pages     int       `json:"pages"`
+}
+
+// SearchCompanies searches the directory (capability companies, 200
+// searches a day).
+func (b *Box) SearchCompanies(q CompanyQuery) (CompanyPage, error) {
+	var r CompanyPage
+	err := b.Call("companies.search", q, &r)
 	return r, err
 }
 

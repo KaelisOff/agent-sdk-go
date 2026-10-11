@@ -48,21 +48,26 @@ func TestParse(t *testing.T) {
 
 func TestRejects(t *testing.T) {
 	for name, edit := range map[string][2]string{
-		"bad id":            {`id = "io.github.example.prospection"`, `id = "Prospection"`},
-		"upper case id":     {`id = "io.github.example.prospection"`, `id = "io.github.Example.prospection"`},
-		"bad version":       {`version = "0.1.0"`, `version = "latest"`},
-		"no name":           {`name = "Prospection"`, `name = " "`},
-		"no license":        {`license = "Apache-2.0"`, ``},
-		"no source":         {`source = "https://github.com/example/agent-prospection"`, ``},
-		"too much memory":   {`memory_mb = 128`, `memory_mb = 4096`},
-		"too long":          {`timeout_min = 15`, `timeout_min = 600`},
-		"bad schedule":      {`schedule = ["30 8 * * 1-5"]`, `schedule = ["every morning"]`},
-		"unknown key":       {`approval = true`, "approval = true\nnetwork = true"},
-		"unknown section":   {`[run]`, "[network]\nallow = true\n[run]"},
-		"too much storage":  {`storage_kb = 1024`, `storage_kb = 99999999`},
-		"negative storage":  {`storage_kb = 1024`, `storage_kb = -1`},
-		"too many emails":   {`mail_send = 30`, `mail_send = 500`},
-		"schedule out of r": {`schedule = ["30 8 * * 1-5"]`, `schedule = ["30 25 * * *"]`},
+		"bad id":             {`id = "io.github.example.prospection"`, `id = "Prospection"`},
+		"upper case id":      {`id = "io.github.example.prospection"`, `id = "io.github.Example.prospection"`},
+		"bad version":        {`version = "0.1.0"`, `version = "latest"`},
+		"no name":            {`name = "Prospection"`, `name = " "`},
+		"no license":         {`license = "Apache-2.0"`, ``},
+		"no source":          {`source = "https://github.com/example/agent-prospection"`, ``},
+		"too much memory":    {`memory_mb = 128`, `memory_mb = 4096`},
+		"too long":           {`timeout_min = 15`, `timeout_min = 600`},
+		"bad schedule":       {`schedule = ["30 8 * * 1-5"]`, `schedule = ["every morning"]`},
+		"unknown key":        {`approval = true`, "approval = true\nnetwork = true"},
+		"unknown section":    {`[run]`, "[network]\nallow = true\n[run]"},
+		"too much storage":   {`storage_kb = 1024`, `storage_kb = 99999999`},
+		"negative storage":   {`storage_kb = 1024`, `storage_kb = -1`},
+		"too many emails":    {`mail_send = 30`, `mail_send = 500`},
+		"too much web":       {`mail_send = 30`, "mail_send = 30\nweb_search = 5000"},
+		"bad setting type":   {`[run]`, "[[settings]]\nkey = \"x\"\nlabel = \"X\"\ntype = \"file\"\n[run]"},
+		"bad setting key":    {`[run]`, "[[settings]]\nkey = \"X Y\"\nlabel = \"X\"\ntype = \"text\"\n[run]"},
+		"choice, no choices": {`[run]`, "[[settings]]\nkey = \"x\"\nlabel = \"X\"\ntype = \"choice\"\n[run]"},
+		"bad default":        {`[run]`, "[[settings]]\nkey = \"x\"\nlabel = \"X\"\ntype = \"toggle\"\ndefault = \"oui\"\n[run]"},
+		"schedule out of r":  {`schedule = ["30 8 * * 1-5"]`, `schedule = ["30 25 * * *"]`},
 	} {
 		doc := strings.Replace(sample, edit[0], edit[1], 1)
 		if _, err := Parse([]byte(doc)); !errors.Is(err, ErrInvalid) {
@@ -116,5 +121,45 @@ func TestSchedule(t *testing.T) {
 		if _, err := ParseSchedule(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
+	}
+}
+
+func TestSettingValues(t *testing.T) {
+	doc := strings.Replace(sample, "[run]", `[[settings]]
+key = "offer"
+label = "Votre offre"
+type = "textarea"
+required = true
+
+[[settings]]
+key = "cities"
+label = "Villes"
+type = "list"
+default = ["Paris"]
+
+[[settings]]
+key = "review"
+label = "Valider chaque message"
+type = "toggle"
+default = true
+
+[run]`, 1)
+	m, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := MissingRequired(m.Settings, nil); strings.Join(got, ",") != "offer" {
+		t.Errorf("missing = %v", got)
+	}
+	v, err := CheckValues(m.Settings, map[string]any{"offer": " Comptabilité ", "cities": []any{"Lyon", " "}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := WithDefaults(m.Settings, v)
+	if all["offer"] != "Comptabilité" || all["review"] != true || len(all["cities"].([]string)) != 1 {
+		t.Errorf("values = %v", all)
+	}
+	if _, err := CheckValues(m.Settings, map[string]any{"review": "yes"}); !errors.Is(err, ErrSettings) {
+		t.Errorf("bad toggle: %v", err)
 	}
 }

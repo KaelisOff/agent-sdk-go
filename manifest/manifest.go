@@ -25,6 +25,8 @@ const (
 	CapApproval = "approval"  // ask the owner or an admin for approval
 	CapMailSend = "mail.send" // send prospecting emails, under the box's guardrails
 	CapMailRead = "mail.read" // read the replies to its own emails
+	CapWeb      = "web"       // search the web and read the pages found
+	CapCompany  = "companies" // the official French company directory
 )
 
 // Platform limits: a manifest may ask for less, never for more.
@@ -36,6 +38,7 @@ const (
 	MaxStorageKB   = 16 * 1024
 	MaxSchedules   = 8
 	MaxMailPerDay  = 200
+	MaxWebPerDay   = 200 // web searches a day (and 4 page reads per search)
 	DefaultMemory  = 128
 	DefaultCPUs    = 1.0
 	DefaultPids    = 64
@@ -58,6 +61,9 @@ type Manifest struct {
 
 	Run         Run         `toml:"run" json:"run"`
 	Permissions Permissions `toml:"permissions" json:"permissions"`
+	// Settings are the agent's form, filled in by the owner in the Agent
+	// Center; the agent reads the values (agent.Box.Settings).
+	Settings []Setting `toml:"settings" json:"settings,omitempty"`
 }
 
 // Run holds the resources an agent asks for at each run.
@@ -83,6 +89,11 @@ type Permissions struct {
 	MailSend int `toml:"mail_send" json:"mail_send,omitempty"`
 	// MailRead asks to read the replies to the agent's own emails.
 	MailRead bool `toml:"mail_read" json:"mail_read,omitempty"`
+	// WebSearch > 0 asks for that many web searches a day, and reading
+	// the pages they found (4 per search).
+	WebSearch int `toml:"web_search" json:"web_search,omitempty"`
+	// Companies asks to search the official French company directory.
+	Companies bool `toml:"companies" json:"companies,omitempty"`
 }
 
 // Capabilities returns the capabilities asked for, in a stable order.
@@ -108,6 +119,12 @@ func (p Permissions) Capabilities() []string {
 	}
 	if p.MailRead {
 		out = append(out, CapMailRead)
+	}
+	if p.WebSearch > 0 {
+		out = append(out, CapWeb)
+	}
+	if p.Companies {
+		out = append(out, CapCompany)
 	}
 	return out
 }
@@ -181,6 +198,12 @@ func (m *Manifest) check() error {
 	}
 	if p.MailSend < 0 || p.MailSend > MaxMailPerDay {
 		return fmt.Errorf("permissions.mail_send must be 0 to %d", MaxMailPerDay)
+	}
+	if p.WebSearch < 0 || p.WebSearch > MaxWebPerDay {
+		return fmt.Errorf("permissions.web_search must be 0 to %d", MaxWebPerDay)
+	}
+	if err := checkSettings(m.Settings); err != nil {
+		return err
 	}
 	if len(p.Schedule) > MaxSchedules {
 		return fmt.Errorf("at most %d schedules", MaxSchedules)

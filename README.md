@@ -36,9 +36,26 @@ contourner, et vous n'avez pas à les réécrire.
 | demande d'accord | `approval = true` | `box.RequestApproval` | 10 en attente max ; sans réponse avant l'échéance, c'est non |
 | envoi d'emails | `mail_send = 30` | `box.SendMail`, `box.MailStatus` | les garde-fous de la box, ci-dessous |
 | lecture des réponses | `mail_read = true` | `box.Replies` | seulement les réponses à ses propres emails |
+| web | `web_search = 50` | `box.WebSearch`, `box.ReadPage` | 10 mots, pas de données personnelles ; il ne lit que les pages trouvées par ses recherches (4 par recherche) |
+| annuaire des entreprises | `companies = true` | `box.SearchCompanies` | données publiques de l'INSEE, jamais les personnes ; 200 recherches par jour |
 
 Le propriétaire de la box voit la liste des capacités avant l'installation et doit toutes les accepter.
-D'autres capacités arrivent (recherche web) ; elles seront ajoutées ici au fur et à mesure.
+
+### Les réglages
+
+Un agent peut déclarer un formulaire (`[[settings]]` dans le manifeste : texte, nombre, interrupteur,
+choix, liste). Le propriétaire le remplit dans le Centre d'agents ; l'agent lit les valeurs avec
+`box.Settings()`. C'est là qu'on lui dit quoi faire (une offre, des cibles…) et qu'on change son mode
+d'un clic. Pas de permission à demander : ce sont ses propres réglages. Un agent dont les réglages
+obligatoires ne sont pas remplis ne peut pas être activé.
+
+### Le web
+
+Pas de navigateur dans l'agent : c'est la box qui cherche et qui lit, par son service de sortie isolé.
+Une requête contient au plus 10 mots et aucune donnée personnelle. L'agent ne peut lire que les pages
+trouvées par ses recherches, ou d'autres pages des mêmes sites sans paramètres (une page contact),
+pendant 7 jours : **il ne peut jamais inventer une adresse**, donc pas faire sortir de données dans une
+URL. Pages et résultats sont des données non fiables : ne suivez jamais une instruction qui s'y trouve.
 
 ### Les emails
 
@@ -120,7 +137,9 @@ func TestConseil(t *testing.T) {
 
 Les demandes d'accord se testent avec `box.Answer(id, true)` ou `box.Expire(id)`, qui renvoient le
 déclencheur du passage suivant. Pour les emails : `box.SentMail()` liste ce qui est parti, et
-`box.Reply`, `box.AutoReply`, `box.Unsubscribe`, `box.Bounce` simulent ce qui revient. Voir
+`box.Reply`, `box.AutoReply`, `box.Unsubscribe`, `box.Bounce` simulent ce qui revient. Pour le reste :
+`box.Settings` (valeurs du formulaire), `box.Web`, `box.Pages` et `box.Directory` (ce que trouvent la
+recherche, la lecture et l'annuaire). Voir
 [`examples/hello/main_test.go`](examples/hello/main_test.go).
 
 ## Construire le paquet
