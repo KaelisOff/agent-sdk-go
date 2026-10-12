@@ -88,6 +88,7 @@ const (
 	CodeUnknown    = "unknown_method"
 	CodeTooMany    = "too_many_calls"
 	CodeFailed     = "failed"
+	CodeNotFound   = "not_found" // no such automation
 
 	// Refusals of the box's email guardrails (SendMail).
 	CodeNotConfigured    = "not_configured"    // no mailbox on this box
@@ -553,6 +554,112 @@ func (b *Box) SearchCompanies(q CompanyQuery) (CompanyPage, error) {
 	var r CompanyPage
 	err := b.Call("companies.search", q, &r)
 	return r, err
+}
+
+// --- automations -------------------------------------------------------------------
+
+// Graph is an automation: a trigger (the node "trigger") and blocks
+// linked by edges; see the box's documentation for the blocks and their
+// parameters.
+type Graph struct {
+	Version int    `json:"version"`
+	Nodes   []Node `json:"nodes"`
+	Edges   []Edge `json:"edges"`
+}
+
+// Node is a block of an automation.
+type Node struct {
+	ID     string         `json:"id"`
+	Type   string         `json:"type"`
+	Params map[string]any `json:"params,omitempty"`
+	X      float64        `json:"x,omitempty"`
+	Y      float64        `json:"y,omitempty"`
+}
+
+// Edge links two blocks; Port is the way out of a block with several
+// ("yes"/"no" of a condition, a label of a classification, "each"/"done"
+// of a loop).
+type Edge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	Port string `json:"port,omitempty"`
+}
+
+// Automation is one of the box's automations, as an agent sees it: never
+// the data of its runs.
+type Automation struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Trigger     string `json:"trigger"` // the trigger's block type
+	Enabled     bool   `json:"enabled"`
+	// Runnable: this agent may start it (RunAutomation).
+	Runnable bool `json:"runnable"`
+	// ProposedBy: still a proposal (kept off until the owner accepts it).
+	ProposedBy string `json:"proposed_by,omitempty"`
+	// Graph and Runs: with Automation(id) only.
+	Graph   *Graph          `json:"graph,omitempty"`
+	LastRun *AutomationRun  `json:"last_run,omitempty"`
+	Runs    []AutomationRun `json:"runs,omitempty"`
+}
+
+// AutomationRun is the status of a run: queued, running, ok, stopped or
+// failed.
+type AutomationRun struct {
+	ID        string `json:"id"`
+	Trigger   string `json:"trigger"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
+	StartedAt string `json:"started_at"`
+	EndedAt   string `json:"ended_at,omitempty"`
+}
+
+// Automations lists the box's automations (capability automations.read).
+func (b *Box) Automations() ([]Automation, error) {
+	var r struct {
+		Automations []Automation `json:"automations"`
+	}
+	err := b.Call("automations.list", struct{}{}, &r)
+	return r.Automations, err
+}
+
+// Automation returns an automation with its graph and the status of its
+// last runs (capability automations.read).
+func (b *Box) Automation(id string) (Automation, error) {
+	var r Automation
+	err := b.Call("automations.get", map[string]string{"id": id}, &r)
+	return r, err
+}
+
+// RunAutomation starts an active automation its owner opened to this
+// agent (capability automations.run); inputs are the trigger's values (a
+// webhook's fields…). It returns the run's id: follow it with Automation.
+func (b *Box) RunAutomation(id string, inputs map[string]string) (string, error) {
+	var r struct {
+		RunID string `json:"run_id"`
+	}
+	err := b.Call("automations.run", map[string]any{"id": id, "inputs": inputs}, &r)
+	return r.RunID, err
+}
+
+// AutomationProposal is an automation an agent proposes: new, or a
+// modification of an existing one (Replaces).
+type AutomationProposal struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Graph       Graph  `json:"graph"`
+	Replaces    string `json:"replaces,omitempty"`
+}
+
+// ProposeAutomation proposes an automation (capability
+// automations.propose). The box checks it, keeps it off and asks the
+// owner, who reads it and accepts it or not; 10 proposals at most wait.
+func (b *Box) ProposeAutomation(p AutomationProposal) (string, error) {
+	var r struct {
+		ID string `json:"id"`
+	}
+	err := b.Call("automations.propose", p, &r)
+	return r.ID, err
 }
 
 // --- entry point ---------------------------------------------------------------------

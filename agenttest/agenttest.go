@@ -99,6 +99,14 @@ type Box struct {
 	WebQueries []string
 	ReadURLs   []string
 
+	// Automations are the box's automations the agent can see
+	// (automations.read) and start when Runnable (automations.run); a
+	// Graph is given by automations.get. Started and Proposals record what
+	// the agent started and proposed.
+	Automations []agent.Automation
+	Started     []AutomationStart
+	Proposals   []agent.AutomationProposal
+
 	mailState *mailState
 	web       *webState
 	runNow    time.Time
@@ -392,6 +400,8 @@ func (b *Box) call(method string, raw json.RawMessage) (any, *callError) {
 		return b.webRead(raw)
 	case "companies.search":
 		return b.companiesSearch(raw)
+	case "automations.list", "automations.get", "automations.run", "automations.propose":
+		return b.automations(method, raw)
 	default:
 		return nil, fail(agent.CodeUnknown, "unknown method %s", method)
 	}

@@ -44,6 +44,7 @@ Au-delà de `memory_mb`, l'agent est tué ; au-delà de `timeout_min`, le passag
 | `mail_read = true` | lire les réponses à ses propres emails |
 | `web_search = N` | N recherches web par jour (200 max), et lire les pages trouvées (4 par recherche) |
 | `companies = true` | chercher dans l'annuaire officiel des entreprises (200 recherches par jour) |
+| `automations = ["read", "run", "propose"]` | les automatisations de la box : les voir avec l'état de leurs passages (`read`), lancer celles que le propriétaire lui ouvre (`run`), en proposer (`propose`, gardées désactivées jusqu'à son accord) ; n'importe lesquelles des trois, une fois chacune |
 
 Ne demandez que ce qui sert : chaque capacité est montrée au propriétaire, qui doit toutes les accepter.
 Une mise à jour qui en demande une nouvelle est signalée.

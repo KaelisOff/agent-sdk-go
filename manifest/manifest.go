@@ -27,7 +27,16 @@ const (
 	CapMailRead = "mail.read" // read the replies to its own emails
 	CapWeb      = "web"       // search the web and read the pages found
 	CapCompany  = "companies" // the official French company directory
+	// The box's automations: see them and the status of their runs
+	// (never their data); start those the owner opened to the agent;
+	// propose one, kept off until the owner accepts it.
+	CapAutoRead    = "automations.read"
+	CapAutoRun     = "automations.run"
+	CapAutoPropose = "automations.propose"
 )
+
+// automationAccess are the values of permissions.automations.
+var automationAccess = map[string]string{"read": CapAutoRead, "run": CapAutoRun, "propose": CapAutoPropose}
 
 // Platform limits: a manifest may ask for less, never for more.
 const (
@@ -94,6 +103,9 @@ type Permissions struct {
 	WebSearch int `toml:"web_search" json:"web_search,omitempty"`
 	// Companies asks to search the official French company directory.
 	Companies bool `toml:"companies" json:"companies,omitempty"`
+	// Automations asks for the box's automations: "read", "run",
+	// "propose" (any of them).
+	Automations []string `toml:"automations" json:"automations,omitempty"`
 }
 
 // Capabilities returns the capabilities asked for, in a stable order.
@@ -125,6 +137,11 @@ func (p Permissions) Capabilities() []string {
 	}
 	if p.Companies {
 		out = append(out, CapCompany)
+	}
+	for _, a := range []string{"read", "run", "propose"} {
+		if slices.Contains(p.Automations, a) {
+			out = append(out, automationAccess[a])
+		}
 	}
 	return out
 }
@@ -201,6 +218,11 @@ func (m *Manifest) check() error {
 	}
 	if p.WebSearch < 0 || p.WebSearch > MaxWebPerDay {
 		return fmt.Errorf("permissions.web_search must be 0 to %d", MaxWebPerDay)
+	}
+	for i, a := range p.Automations {
+		if automationAccess[a] == "" || slices.Contains(p.Automations[:i], a) {
+			return fmt.Errorf(`permissions.automations: "read", "run" and "propose", once each`)
+		}
 	}
 	if err := checkSettings(m.Settings); err != nil {
 		return err

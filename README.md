@@ -38,6 +38,7 @@ contourner, et vous n'avez pas à les réécrire.
 | lecture des réponses | `mail_read = true` | `box.Replies` | seulement les réponses à ses propres emails |
 | web | `web_search = 50` | `box.WebSearch`, `box.ReadPage` | 10 mots, pas de données personnelles ; il ne lit que les pages trouvées par ses recherches (4 par recherche) |
 | annuaire des entreprises | `companies = true` | `box.SearchCompanies` | données publiques de l'INSEE, jamais les personnes ; 200 recherches par jour |
+| automatisations de la box | `automations = ["read", "run", "propose"]` | `box.Automations`, `box.Automation`, `box.RunAutomation`, `box.ProposeAutomation` | jamais les données des passages ; il ne lance que celles que le propriétaire lui ouvre ; ses propositions restent désactivées jusqu'à ce que le propriétaire les accepte (10 en attente max) |
 
 Le propriétaire de la box voit la liste des capacités avant l'installation et doit toutes les accepter.
 

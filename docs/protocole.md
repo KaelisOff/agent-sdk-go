@@ -77,6 +77,10 @@ s'affiche dans l'historique de l'agent.
 | `web.search` | `web` | `query` (1 à 10 mots, sans données personnelles), `max_results` (1 à 8, 5 par défaut) | `{"results": [{"title", "url", "snippet"}]}` |
 | `web.read` | `web` | `url` : une page trouvée par `web.search`, ou une autre page du même site sans paramètres (7 jours) | `{"url", "title", "text", "links": [{"text", "url"}]}` ; `not_a_page` si illisible |
 | `companies.search` | `companies` | `text`, `activities` (codes NAF), `postal_code`, `department`, `city_code`, `sizes`, `sole_traders`, `page`, `per_page` (25 max) | `{"companies": [{"siren", "siret", "name", "trade_name", "activity", "address", "postal_code", "city", "department", "size", "category", "sole_trader", "created"}], "total", "page", "pages"}` |
+| `automations.list` | `automations.read` | aucun | `{"automations": [{"id", "name", "description", "trigger", "enabled", "runnable", "proposed_by", "last_run": {"id", "trigger", "status", "error", "started_at", "ended_at"}}]}` ; jamais les données des passages |
+| `automations.get` | `automations.read` | `id` | la même chose, plus `graph` (`{"version", "nodes", "edges"}`) et `runs` (les 10 derniers passages, état seulement) ; `not_found` |
+| `automations.run` | `automations.run` | `id`, `inputs` (facultatif : valeurs des sorties du déclencheur, comme un essai) | `{"run_id", "status"}` ; `permission_denied` si le propriétaire ne l'a pas ouverte à cet agent, `invalid_params` si elle est désactivée, `quota_exceeded` (200 passages par jour, 10 en attente) |
+| `automations.propose` | `automations.propose` | `name` (1 à 80), `description` (300 max), `graph`, `replaces` (facultatif : l'automatisation à modifier) | `{"id", "status": "proposed"}` ; le graphe est vérifié comme dans l'éditeur (`invalid_params` avec la raison) ; gardée désactivée jusqu'à l'accord du propriétaire, sans adresse webhook ; `quota_exceeded` si 10 propositions attendent |
 | `mail.status` | `mail.send` ou `mail.read` | aucun | `{"configured", "paused", "window_open", "next_window", "sent_today", "limit_today", "agent_sent_today", "agent_limit", "stats": [{"campaign", "variant", "sent", "replied", "auto_replies", "unsubscribed", "bounced"}]}` |
 
 Les paramètres inconnus sont refusés (`invalid_params`). Le modèle est partagé avec les conversations
@@ -93,6 +97,7 @@ de la box : un appel peut attendre qu'une génération en cours se termine.
 | `too_many_calls` | plus de 200 appels dans ce passage (l'agent est ensuite arrêté) |
 | `failed` | la box n'a pas pu faire l'action (modèle indisponible, serveur mail injoignable…) |
 | `not_a_page` | `web.read` : l'adresse n'est pas une page web lisible (introuvable, PDF…) |
+| `not_found` | cette automatisation n'existe pas |
 | `plugin_disabled` | le plugin derrière cette capacité (Messagerie, Recherche web, Annuaire) est désactivé par le propriétaire : réessayer à un prochain passage |
 
 Refus propres aux emails (`mail.send`) :
