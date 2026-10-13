@@ -2,7 +2,7 @@
 // (.kagent) from it and a static Linux executable.
 //
 //	kagent -check manifest.toml
-//	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o agent .
+//	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w' -o agent .
 //	kagent -manifest manifest.toml -executable agent -o mon-agent.kagent
 //
 // The package is reproducible: rebuilding from the same sources gives the

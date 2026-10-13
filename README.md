@@ -154,12 +154,16 @@ déclencheur du passage suivant. Pour les emails : `box.SentMail()` liste ce qui
 recherche, la lecture et l'annuaire). Voir
 [`examples/hello/main_test.go`](examples/hello/main_test.go).
 
+`box.RunProcess(cmd, déclencheur)` fait la même chose avec l'**exécutable compilé** (le protocole passe
+par son entrée et sa sortie standard) : c'est ainsi que le magasin essaie chaque agent dans une cage
+simulée, et vous pouvez faire de même avec `dist/agent`.
+
 ## Construire le paquet
 
 ```sh
 go install github.com/KaelisOff/agent-sdk-go/cmd/kagent@latest
 kagent -check manifest.toml
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o agent .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -buildvcs=false -ldflags '-s -w' -o agent .
 kagent -manifest manifest.toml -executable agent
 ```
 

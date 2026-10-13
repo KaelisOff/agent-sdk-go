@@ -24,9 +24,11 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"slices"
 	"sort"
 	"strings"
@@ -204,27 +206,10 @@ func (b *Box) pending(id string) *Approval {
 
 // Run runs the agent's handler once, as the box would for trigger.
 func (b *Box) Run(h agent.Handler, trig agent.Trigger) Result {
-	if msg := b.checkTrigger(trig); msg != "" {
-		return Result{Status: "failed", ExitCode: -1, Logs: "agenttest: " + msg + "\n"}
+	info, failed := b.begin(trig)
+	if failed != nil {
+		return *failed
 	}
-	if b.Storage == nil {
-		b.Storage = map[string]string{}
-	}
-	b.Runs++
-	loc := b.Location
-	if loc == nil {
-		loc = time.Local
-	}
-	now := b.Now
-	if now.IsZero() {
-		now = time.Now()
-	}
-	b.runNow = now.In(loc)
-	info := agent.Run{
-		ID: fmt.Sprintf("run-%d", b.Runs), Trigger: trig, AgentID: b.Manifest.ID, Version: b.Manifest.Version,
-		Now: now.In(loc), TimeZone: loc.String(), Locale: "fr-FR",
-	}
-
 	toAgentR, toAgentW := io.Pipe()
 	fromAgentR, fromAgentW := io.Pipe()
 	var logs bytes.Buffer
@@ -242,33 +227,137 @@ func (b *Box) Run(h agent.Handler, trig agent.Trigger) Result {
 		code = agent.Serve(agent.NewBox(toAgentR, fromAgentW, &logs), h)
 	}()
 
-	var res Result
+	res, killed := b.converse(info, toAgentW, fromAgentR, func() { toAgentW.CloseWithError(io.ErrClosedPipe) })
+	res.ExitCode = <-exit
+	toAgentW.Close()
+	return finish(res, killed, logs.String())
+}
+
+// MaxLog is what a box keeps of an agent's log (standard error) per run.
+const MaxLog = 16 << 10
+
+// RunProcess runs an agent executable once, as the box would for trigger:
+// the protocol goes over the process's standard input and output, its
+// standard error is its log (the first MaxLog bytes are kept). cmd must
+// not be started, nor have Stdin, Stdout or Stderr set.
+//
+// It is how a compiled agent is tried, e.g. in a sandbox. The process is
+// killed when the box stops the run (too many calls, a message that is not
+// JSON or too long); to bound its duration, build cmd with
+// exec.CommandContext.
+func (b *Box) RunProcess(cmd *exec.Cmd, trig agent.Trigger) Result {
+	info, failed := b.begin(trig)
+	if failed != nil {
+		return *failed
+	}
+	logs := &limitedBuffer{max: MaxLog}
+	cmd.Stderr = logs
+	if cmd.WaitDelay == 0 {
+		cmd.WaitDelay = time.Second
+	}
+	// Standard output is a pipe of our own, not cmd.StdoutPipe: a child
+	// of the agent that keeps it open must not block the run once the
+	// agent is gone (the read deadline below ends it).
+	fromAgent, out, err := os.Pipe()
+	if err != nil {
+		return Result{Status: "failed", ExitCode: -1, Logs: "agenttest: " + err.Error() + "\n"}
+	}
+	defer fromAgent.Close()
+	cmd.Stdout = out
+	toAgent, err := cmd.StdinPipe()
+	if err == nil {
+		err = cmd.Start()
+	}
+	out.Close()
+	if err != nil {
+		return Result{Status: "failed", ExitCode: -1, Logs: "agenttest: cannot start the agent: " + err.Error() + "\n"}
+	}
+	done := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		_ = fromAgent.SetReadDeadline(time.Now().Add(time.Second))
+		close(done)
+	}()
+	res, killed := b.converse(info, toAgent, fromAgent, func() {
+		_ = cmd.Process.Kill()
+		_ = fromAgent.SetReadDeadline(time.Now())
+	})
+	toAgent.Close()
+	<-done
+	res.ExitCode = cmd.ProcessState.ExitCode()
+	if killed == "" && res.ExitCode == -1 {
+		killed = "the agent was killed: " + cmd.ProcessState.String()
+	}
+	return finish(res, killed, logs.String())
+}
+
+// begin checks the trigger and prepares a run; failed is the result when
+// the run cannot happen.
+func (b *Box) begin(trig agent.Trigger) (info agent.Run, failed *Result) {
+	if msg := b.checkTrigger(trig); msg != "" {
+		return agent.Run{}, &Result{Status: "failed", ExitCode: -1, Logs: "agenttest: " + msg + "\n"}
+	}
+	if b.Storage == nil {
+		b.Storage = map[string]string{}
+	}
+	b.Runs++
+	loc := b.Location
+	if loc == nil {
+		loc = time.Local
+	}
+	now := b.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	b.runNow = now.In(loc)
+	return agent.Run{
+		ID: fmt.Sprintf("run-%d", b.Runs), Trigger: trig, AgentID: b.Manifest.ID, Version: b.Manifest.Version,
+		Now: now.In(loc), TimeZone: loc.String(), Locale: "fr-FR",
+	}, nil
+}
+
+// converse sends start, then answers the agent's calls until its output
+// ends. stop is called once when the box stops the run; killed is why.
+func (b *Box) converse(info agent.Run, toAgent io.Writer, fromAgent io.Reader, stop func()) (res Result, killed string) {
 	send := func(v any) {
 		line, _ := json.Marshal(v)
-		_, _ = toAgentW.Write(append(line, '\n'))
+		_, _ = toAgent.Write(append(line, '\n'))
 	}
-	killed := ""
 	kill := func(reason string) {
 		if killed == "" {
 			killed = reason
-			toAgentW.CloseWithError(io.ErrClosedPipe)
+			stop()
 		}
 	}
 	send(map[string]any{"type": "start", "protocol": 1, "run": info})
 
-	rd := bufio.NewReader(fromAgentR)
+	rd := bufio.NewReaderSize(fromAgent, 64<<10)
+	var line []byte
 	for {
-		line, err := rd.ReadBytes('\n')
+		chunk, err := rd.ReadSlice('\n')
+		// A message longer than MaxLine is never held in full: the run
+		// stops as soon as it is too long.
+		if killed == "" && len(line)+len(chunk) <= MaxLine+1 {
+			line = append(line, chunk...)
+		} else if killed == "" {
+			kill("message longer than 1 MB")
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
 		if len(bytes.TrimSpace(line)) > 0 && killed == "" {
 			b.handle(line, &res, send, kill)
 		}
+		line = line[:0]
 		if err != nil {
 			break
 		}
 	}
-	res.ExitCode = <-exit
-	toAgentW.Close()
-	res.Logs = logs.String()
+	return res, killed
+}
+
+func finish(res Result, killed, logs string) Result {
+	res.Logs = logs
 	switch {
 	case killed != "":
 		res.Status = "killed"
@@ -280,6 +369,21 @@ func (b *Box) Run(h agent.Handler, trig agent.Trigger) Result {
 	}
 	return res
 }
+
+// limitedBuffer keeps the first max bytes written to it.
+type limitedBuffer struct {
+	buf bytes.Buffer
+	max int
+}
+
+func (l *limitedBuffer) Write(p []byte) (int, error) {
+	if room := l.max - l.buf.Len(); room > 0 {
+		l.buf.Write(p[:min(len(p), room)])
+	}
+	return len(p), nil
+}
+
+func (l *limitedBuffer) String() string { return l.buf.String() }
 
 func (b *Box) checkTrigger(trig agent.Trigger) string {
 	p := b.Manifest.Permissions
