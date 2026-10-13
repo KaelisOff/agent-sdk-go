@@ -35,3 +35,8 @@ Le magasin d'agents ne prendra pas de paquets envoyés à la main : il **recompi
 le dépôt public** (`source` du manifeste), vérifiera qu'il retrouve les mêmes octets que l'auteur, fera
 ses analyses automatiques (et une revue humaine pour une première publication ou une nouvelle
 permission), puis signera le paquet.
+
+La signature suit le format du module public
+[`github.com/KaelisOff/trust`](https://github.com/KaelisOff/trust) : un catalogue signé (`index.json`)
+donne la taille et l'empreinte SHA-256 de chaque paquet publié, et les boîtes refusent tout paquet qui
+ne correspond pas. Chacun peut vérifier le catalogue et les paquets avec ce module.
