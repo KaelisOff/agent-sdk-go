@@ -44,9 +44,15 @@ git rev-parse HEAD                     # doit être le commit de la recette
 export GOTOOLCHAIN=local GOWORK=off GOFLAGS=-mod=readonly   # la version de Go de la recette
 GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org go mod download
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags '-s -w' -o agent .
-kagent -manifest manifest.toml -executable agent -o agent.kagent   # la version de kagent de la recette
+kagent -manifest manifest.toml -executable agent -o agent.kagent   # kagent de la recette (version et Go)
 sha256sum agent.kagent                 # doit être l'empreinte publiée
 ```
+
+L'exécutable ne dépend que des sources et de la version de Go (`go`) ; le paquet dépend en plus de
+`kagent` **et de la version de Go qui l'a compilé** (`kagent_go`) : la compression gzip de la couche
+change d'une version de Go à l'autre. Installez `kagent` avec cette version-là
+(`GOTOOLCHAIN=go1.26.0 go install github.com/KaelisOff/agent-sdk-go/cmd/kagent@v0.6.0`, par exemple),
+ou comparez l'empreinte de l'exécutable (`binary_sha256`).
 
 Le magasin compile **sans réseau** (les modules sont téléchargés avant, par le proxy Go et vérifiés
 par la base d'empreintes), avec le cache de modules plutôt qu'un dossier `vendor/` (dont le contenu
