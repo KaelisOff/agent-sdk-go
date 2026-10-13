@@ -14,7 +14,6 @@ package pack
 import (
 	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -69,12 +68,12 @@ func Build(manifestTOML, executable []byte, arch string, out io.Writer) (Result,
 	if err := tw.Close(); err != nil {
 		return Result{}, err
 	}
-	diffID := digest(layer.Bytes())
-	var gz bytes.Buffer
-	zw, _ := gzip.NewWriterLevel(&gz, gzip.BestCompression)
-	zw.Write(layer.Bytes())
-	zw.Close()
-	layerBlob := gz.Bytes()
+	// The layer is not compressed: a compressor's output changes from one
+	// Go version to the next, and the package's digest must depend only
+	// on the sources (the store's catalogue signs it). Downloads are
+	// compressed by the transport instead.
+	layerBlob := layer.Bytes()
+	diffID := digest(layerBlob)
 
 	config, _ := json.Marshal(map[string]any{
 		"architecture": arch,
@@ -91,7 +90,7 @@ func Build(manifestTOML, executable []byte, arch string, out io.Writer) (Result,
 		"schemaVersion": 2,
 		"mediaType":     "application/vnd.oci.image.manifest.v1+json",
 		"config":        descriptor("application/vnd.oci.image.config.v1+json", config),
-		"layers":        []any{descriptor("application/vnd.oci.image.layer.v1.tar+gzip", layerBlob)},
+		"layers":        []any{descriptor("application/vnd.oci.image.layer.v1.tar", layerBlob)},
 	})
 	res.Digest = digest(imageManifest)
 	desc := descriptor("application/vnd.oci.image.manifest.v1+json", imageManifest)

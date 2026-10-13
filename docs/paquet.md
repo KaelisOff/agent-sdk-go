@@ -20,7 +20,8 @@ Les mêmes sources donnent toujours les mêmes octets :
 
 - dates de tous les fichiers fixées au 1er janvier 1970, propriétaires et droits fixes ;
 - ordre des fichiers fixe, archives tar au format PAX ;
-- compression gzip au niveau maximal, sans nom ni date ;
+- couche de l'image **non compressée** (la sortie d'un compresseur change d'une version de Go à
+  l'autre ; le téléchargement, lui, est compressé par le transport) ;
 - binaire Go compilé avec `-trimpath` (pas de chemins locaux), `-buildvcs=false` (pas d'état du dépôt
   git, qui changerait d'une copie à l'autre) et `-ldflags '-s -w'`.
 
@@ -44,15 +45,9 @@ git rev-parse HEAD                     # doit être le commit de la recette
 export GOTOOLCHAIN=local GOWORK=off GOFLAGS=-mod=readonly   # la version de Go de la recette
 GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org go mod download
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1 go build -trimpath -buildvcs=false -ldflags '-s -w' -o agent .
-kagent -manifest manifest.toml -executable agent -o agent.kagent   # kagent de la recette (version et Go)
+kagent -manifest manifest.toml -executable agent -o agent.kagent   # la version de kagent de la recette
 sha256sum agent.kagent                 # doit être l'empreinte publiée
 ```
-
-L'exécutable ne dépend que des sources et de la version de Go (`go`) ; le paquet dépend en plus de
-`kagent` **et de la version de Go qui l'a compilé** (`kagent_go`) : la compression gzip de la couche
-change d'une version de Go à l'autre. Installez `kagent` avec cette version-là
-(`GOTOOLCHAIN=go1.26.0 go install github.com/KaelisOff/agent-sdk-go/cmd/kagent@v0.6.0`, par exemple),
-ou comparez l'empreinte de l'exécutable (`binary_sha256`).
 
 Le magasin compile **sans réseau** (les modules sont téléchargés avant, par le proxy Go et vérifiés
 par la base d'empreintes), avec le cache de modules plutôt qu'un dossier `vendor/` (dont le contenu
